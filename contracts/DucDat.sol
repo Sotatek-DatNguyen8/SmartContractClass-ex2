@@ -2,10 +2,12 @@
 pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "hardhat/console.sol";
-
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 contract DucDatToken is ERC20 {
+    using SafeMath for uint256;
     address public treasury;
     address public owner;
+
     
     constructor(address _owner) ERC20("DucDatToken", "DDT") {
         owner = _owner;
@@ -14,8 +16,7 @@ contract DucDatToken is ERC20 {
     }
 
     // address[] backList;
-    mapping(uint256 => address) public backList;
-    uint256 public countOfBacklist = 0;
+    mapping(address => bool) public backList;
     function mint(address account, uint256 amount) public OnlyOwner {
         _mint(account, amount);
     }
@@ -28,38 +29,28 @@ contract DucDatToken is ERC20 {
     function addToBackList(address _account) external OnlyOwner {
         console.log("address: ", _account);
         // backList.push(_account);
-        backList[countOfBacklist] = _account;
-        countOfBacklist++;
+        backList[_account] = true;
     }
 
-    // function getBackList() public view virtual returns (address[] memory) {
-    //     return backList;
-    // }
+    function isInBackList(address _account) public view returns (bool){
+        return backList[_account];
+    }
 
     function removeFromBackList(address _account) external OnlyOwner {
-        uint256 _index;
-        for (uint256 i = 0; i < countOfBacklist; i++) {
-            if (backList[i] == _account) {
-                _index = i;
-                break;
-            } 
-        }
-        for (uint256 j = _index; j < countOfBacklist - 1; j++) {
-            backList[j] = backList[j + 1];
-        }
-        // backList.pop();
-        countOfBacklist--;
-        delete backList[_index];
+        backList[_account] = false;
     }
 
-    function transferInternal(
-        address from,
+    function transfer(
         address to,
         uint256 value
-    ) public OnlyUserNotInBackList {
+    ) public override OnlyUserNotInBackList returns (bool) {
         console.log("treasury sol: ", treasury);
-        _transfer(from, to, (value) * 95 / 100);
-        _transfer(from, treasury, (value * 5) / 100);
+        uint256 contribution = value.mul(95).div(100);
+        uint256 _value = value.sub(contribution);
+        _transfer(msg.sender, to, contribution);
+        _transfer(msg.sender, treasury, _value);
+
+        return true;
     }
 
     modifier OnlyOwner() {
@@ -69,15 +60,7 @@ contract DucDatToken is ERC20 {
     }
 
     modifier OnlyUserNotInBackList() {
-        bool checkUserInBackList = false;
-        address _user = msg.sender;
-        for (uint256 i = 0; i < countOfBacklist; i++) {
-            if (backList[i] == _user) {
-                checkUserInBackList = true;
-                break;
-            }
-        }
-        require(!checkUserInBackList, "User must not exist in back list");
+        require(!backList[msg.sender], "User must not exist in back list");
         _;
     }
 }
